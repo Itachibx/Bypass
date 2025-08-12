@@ -1,0 +1,14 @@
+/
+/api
+/api/auth
+/api/login
+/api/search
+/graphiql
+/graphql
+/health
+/login
+/logout
+/openapi.json
+/search
+/signup
+/swagger
