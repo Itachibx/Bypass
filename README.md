@@ -12,6 +12,7 @@ Check reflection cho true bypassed (kiểm tra payload có reflect trong body re
 Log chi tiết cho bypassed, blocked, và reflected payload.
 
 #Cài Đặt
+git clone https://github.com/Itachibx/Bypass/
 Cài dependencies:
 pip install -r requirements.txt
 (Giả sử requirements.txt bao gồm requests, urllib3, prettytable, ast nếu cần).
