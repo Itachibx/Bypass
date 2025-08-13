@@ -8,6 +8,7 @@ import random
 import logging
 import threading
 import urllib.parse
+import ast
 
 import requests
 import urllib3
@@ -65,26 +66,32 @@ class WAFBypass:
         self.dns_callback = dns_callback
         self.methods = [m.strip().upper() for m in (methods or ["GET", "POST"])]
         self.verify_tls = not bool(insecure)
+
         self.rps = float(rps) if rps else 0.0
         self._min_interval = 1.0 / self.rps if self.rps > 0 else 0.0
         self.retries = int(retries or 0)
         self.retry_backoff = float(retry_backoff or 0.0)
         self.csv_out = csv_out
+
         self.heuristics_mode = (heuristics_mode or "cautious").lower()
         self.verify_challenge = bool(verify_challenge)
         self.sticky_session = True if sticky_session is None else bool(sticky_session)
         self.retry_on = [x.strip().lower() for x in (retry_on or "").split(",") if x.strip()]
         self.no_retry_on = [int(x.strip()) for x in (no_retry_on or "").split(",") if x.strip().isdigit()]
+
         self.paths = paths or ["/"]
+
         self.stats = {"BLOCKED": 0, "BYPASSED": 0, "PASSED": 0, "FALSED": 0, "CHALLENGE": 0}
         self.wb_result = wb_result or {}
         self.details = details
         self.no_progress = no_progress
         self.replay = replay
+
         self._lock = threading.Lock()
         self._rate_lock = threading.Lock()
         self._last_ts = 0.0
         self._tls = threading.local()
+
         self.baseline_code = None
         self.baseline_body = None
         self._stop = False
@@ -109,8 +116,10 @@ class WAFBypass:
             s = getattr(self._tls, "session", None)
             if s is not None:
                 return s
+
         s = requests.Session()
         s.trust_env = False
+
         if self.retries > 0:
             status_forcelist = [int(x) for x in self.retry_on if str(x).isdigit()]
             retry = Retry(
@@ -124,6 +133,7 @@ class WAFBypass:
             adapter = HTTPAdapter(max_retries=retry)
             s.mount("http://", adapter)
             s.mount("https://", adapter)
+
         if self.sticky_session:
             self._tls.session = s
         return s
@@ -162,7 +172,7 @@ class WAFBypass:
             self.baseline_body = r.text or ""
             logger.info(f"Baseline response: status={r.status_code}, body={r.text[:100]}")
         except Exception as e:
-            logger.error(f"Baseline request failed: {e}")
+            logger.error(f"Baseline request failed: %s", e)
             self.baseline_code = 200
             self.baseline_body = ""
 
@@ -185,12 +195,16 @@ class WAFBypass:
         except Exception:
             return False
 
-    def classify(self, status_code: int, is_payload: bool, body: str, headers: dict) -> str:
+    def classify(self, status_code: int, is_payload: bool, body: str, headers: dict, payload: str) -> str:
         logger.debug(f"Classifying: status_code={status_code}, is_payload={is_payload}, body={body[:100]}, headers={headers}")
         if status_code in self.block_code or self.is_challenge(status_code, body, headers):
             return "BLOCKED"
         if status_code == 200:
-            return "BYPASSED" if is_payload else "PASSED"
+            if is_payload and payload and str(payload) in body:  # Check reflection
+                return "BYPASSED_REFLECTED"  # True bypass
+            elif is_payload:
+                return "PASSED_NO_REFLECT"  # Passed but no impact
+            return "PASSED"
         if not is_payload:
             return "PASSED"
         return "FALSED"
@@ -210,7 +224,7 @@ class WAFBypass:
     def _process_one(self, json_path: str):
         logger.info(f"Processing payload: {json_path}")
         try:
-            payload_obj = get_payload(json_path, dns_cb=self.dns_callback, host=self.host)
+            payload_obj = get_payload(json_path, dns_cb=self.dns_callback)
             logger.debug(f"Loaded payload: {payload_obj}")
         except Exception as e:
             logger.error(f"Failed to load payload {json_path}: {e}")
@@ -229,149 +243,75 @@ class WAFBypass:
                 logger.warning(f"Invalid payload format in {json_path}: {payload}")
                 continue
 
-            methods_in_payload = payload.get("METHOD")
-            if isinstance(methods_in_payload, str):
-                methods_to_try = [m.strip().upper() for m in methods_in_payload.split(",") if m.strip()]
-            elif isinstance(methods_in_payload, list):
-                methods_to_try = [str(m).strip().upper() for m in methods_in_payload if str(m).strip()]
-            else:
-                methods_to_try = list(self.methods or ["GET"])
+            has_zone = any(zone in payload for zone in ZONES_ALL)
+            if not has_zone:
+                logger.warning(f"No zone in {json_path}, fallback to ARGS")
+                payload["ARGS"] = {"poc": str(payload)}
 
-            for path in (self.paths or ["/"]):
+            # Fix for method parsing
+            methods_in_payload = payload.get("METHOD")
+            if methods_in_payload:
+                if isinstance(methods_in_payload, str) and methods_in_payload.startswith("[") and methods_in_payload.endswith("]"):
+                    try:
+                        methods_list = ast.literal_eval(methods_in_payload)
+                        if isinstance(methods_list, list):
+                            methods_to_try = [m.strip().upper() for m in methods_list if m.strip()]
+                        else:
+                            methods_to_try = self.methods
+                    except (ValueError, SyntaxError):
+                        methods_to_try = self.methods
+                else:
+                    raw = methods_in_payload.replace(" ", ",")
+                    methods_to_try = [m.strip().upper() for m in raw.split(",") if m.strip()]
+            else:
+                methods_to_try = self.methods
+
+            for path in self.paths:
                 base_url = urllib.parse.urljoin(self.host, path)
 
                 for method in methods_to_try:
                     for zone in ZONES_ALL:
                         if zone not in payload or payload.get(zone) in (None, "", {}, []):
+                            logger.debug(f"Skipping empty/invalid zone {zone} for {json_path}")
                             continue
 
                         req_kwargs = {"headers": dict(base_headers), "allow_redirects": False}
                         url = base_url
 
-                        if isinstance(payload.get("HEADER"), dict):
-                            req_kwargs["headers"].update({k: str(v) for k, v in payload["HEADER"].items()})
-                        if isinstance(payload.get("COOKIE"), dict):
-                            req_kwargs["cookies"] = {k: str(v) for k, v in payload["COOKIE"].items()}
-                        if isinstance(payload.get("USER-AGENT"), str):
-                            req_kwargs["headers"]["User-Agent"] = payload["USER-AGENT"]
-                        if isinstance(payload.get("REFERER"), str):
-                            req_kwargs["headers"]["Referer"] = payload["REFERER"]
+                        # Setup req_kwargs for zone
                         if zone == "URL" and isinstance(payload["URL"], str):
                             url = urllib.parse.urljoin(base_url, payload["URL"])
                         elif zone == "ARGS" and isinstance(payload["ARGS"], dict):
                             url = f"{base_url}?{urllib.parse.urlencode(payload['ARGS'])}"
                         elif zone == "BODY":
-                            b = payload["BODY"]
-                            if isinstance(b, dict) and b.get("_files"):
-                                files, data_fields = [], {}
-                                for item in b["_files"]:
-                                    field = item.get("field", "file")
-                                    filename = item.get("filename", "poc.txt")
-                                    content = (item.get("content", "poc") or "").encode("utf-8")
-                                    ctype = item.get("content_type", "application/octet-stream")
-                                    files.append((field, (filename, content, ctype)))
-                                for k, v in b.items():
-                                    if k != "_files":
-                                        data_fields[k] = v
-                                req_kwargs["files"] = files
-                                if data_fields:
-                                    req_kwargs["data"] = data_fields
-                            elif isinstance(b, dict) and b.get("_json_mode"):
-                                req_kwargs["headers"].setdefault("Content-Type", "application/json")
-                                req_kwargs["json"] = b.get("_json_value", {})
-                            elif isinstance(b, (bytes, str)):
-                                req_kwargs["data"] = b
-                            elif isinstance(b, dict):
-                                req_kwargs["headers"].setdefault("Content-Type", "application/json")
-                                req_kwargs["json"] = b
-                            else:
-                                req_kwargs["data"] = str(b)
+                            req_kwargs["data"] = payload["BODY"]
+                        elif zone == "HEADER" and isinstance(payload["HEADER"], dict):
+                            req_kwargs["headers"].update(payload["HEADER"])
+                        elif zone == "COOKIE" and isinstance(payload["COOKIE"], dict):
+                            req_kwargs["cookies"] = payload["COOKIE"]
+                        elif zone == "USER-AGENT":
+                            req_kwargs["headers"]["User-Agent"] = payload["USER-AGENT"]
+                        elif zone == "REFERER":
+                            req_kwargs["headers"]["Referer"] = payload["REFERER"]
 
                         r = self.send_request(method, url, **req_kwargs)
                         key = f"{path}:{json_path}::{method}::{zone}"
 
                         with self._lock:
                             if r is None:
-                                self.wb_result[key] = {"status": "FAILED", "code": None}
-                                logger.warning(f"Request failed for {key}")
+                                self.wb_result[key] = {"status": "FAILED", "code": None, "payload": payload.get(zone)}
                             else:
                                 body = r.text or ""
-                                status = self.classify(r.status_code, True, body, getattr(r, "headers", {}))
-                                self.wb_result[key] = {"status": status, "code": r.status_code}
-                                if status in ("BYPASSED", "CHALLENGE"):
-                                    self.wb_result[key]["payload"] = {zone: payload.get(zone)}
+                                status = self.classify(r.status_code, True, body, r.headers, payload.get(zone))  # Pass payload for reflection check
+                                self.wb_result[key] = {"status": status, "code": r.status_code, "payload": payload.get(zone)}
                                 if status in self.stats:
                                     self.stats[status] += 1
-
-    def report(self):
-        if not (self.csv_out and self.wb_result):
-            return
-        try:
-            with open(self.csv_out, "w", newline="", encoding="utf-8") as f:
-                w = csv.writer(f)
-                w.writerow(["key", "status", "code", "path", "zone", "json_path", "category", "payload"])
-                for key, val in self.wb_result.items():
-                    path, rest = key.split(":", 1) if ":" in key else ("/", key)
-                    zone = rest.split("::")[-1] if "::" in rest else rest.split("_")[-1]
-                    json_path = rest.split("::")[0] if "::" in rest else rest
-                    parts = os.path.normpath(json_path).split(os.sep)
-                    category = parts[-2] if len(parts) >= 2 else ""
-                    w.writerow([
-                        key,
-                        val.get("status"),
-                        val.get("code"),
-                        path,
-                        zone,
-                        json_path,
-                        category,
-                        str(val.get("payload"))[:500],
-                    ])
-            logger.info("Đã ghi CSV vào %s", self.csv_out)
-        except Exception as e:
-            logger.error("Không ghi được CSV: %s", e)
-
-    def report_html(self, out_path):
-        try:
-            rows = []
-            for key, val in (self.wb_result or {}).items():
-                rows.append({
-                    "key": key,
-                    "status": val.get("status"),
-                    "code": val.get("code"),
-                    "payload": str(val.get("payload"))[:800],
-                })
-            parts = []
-            parts.append("<!doctype html><meta charset='utf-8'><title>WAF Report</title>")
-            parts.append(
-                "<style>body{font-family:system-ui;margin:24px}"
-                "table{border-collapse:collapse;width:100%}"
-                "th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}"
-                ".status{font-weight:600}"
-                ".BLOCKED{color:#16a34a}.BYPASSED{color:#ef4444}.PASSED{color:#2563eb}"
-                ".FALSED{color:#b45309}.CHALLENGE{color:#92400e}</style>"
-            )
-            parts.append("<h1>WAF Test Report</h1>")
-            s = self.stats
-            parts.append(
-                f"<p>BLOCKED: {s.get('BLOCKED',0)} | BYPASSED: {s.get('BYPASSED',0)} | "
-                f"PASSED: {s.get('PASSED',0)} | FALSED: {s.get('FALSED',0)} | "
-                f"CHALLENGE: {s.get('CHALLENGE',0)} | PROCESSED: {self.processed}</p>"
-            )
-            parts.append("<table><thead><tr><th>Key</th><th>Code</th><th>Status</th><th>Payload</th></tr></thead><tbody>")
-            for r in rows:
-                payload_safe = (r["payload"] or "").replace("<", "&lt;").replace(">", "&gt;")
-                parts.append(
-                    f"<tr><td>{r['key']}</td><td>{r['code']}</td>"
-                    f"<td class='status {r['status']}'>{r['status']}</td>"
-                    f"<td><code>{payload_safe}</code></td></tr>"
-                )
-            parts.append("</tbody></table>")
-            html = "".join(parts)
-            with open(out_path, "w", encoding="utf-8") as f:
-                f.write(html)
-            logger.info("Đã tạo HTML report: %s", out_path)
-        except Exception as e:
-            logger.error("Lỗi tạo HTML report: %s", e)
+                                if status == "BYPASSED_REFLECTED":
+                                    logger.info(f"TRUE BYPASSED (REFLECTED): {key} with payload {payload.get(zone)}")
+                                elif status == "PASSED_NO_REFLECT":
+                                    logger.info(f"PASSED but NO REFLECT: {key} with payload {payload.get(zone)}")
+                                elif status == "BLOCKED":
+                                    logger.info(f"BLOCKED: {key} with code {r.status_code}")
 
     def start(self):
         logger.info(f"Starting scan for {self.host}")
@@ -389,7 +329,7 @@ class WAFBypass:
             for f in files:
                 if f.lower().endswith(".json"):
                     found.append(os.path.join(root, f))
-        logger.info("Tìm thấy %d payload JSON: %s", len(found), found)
+        logger.info("Tìm thấy %d payload JSON.", len(found))
 
         baseline_key = "BASELINE:/"
         self.wb_result[baseline_key] = {
@@ -438,10 +378,7 @@ class WAFBypass:
                     zone = rest.split("::")[-1] if "::" in rest else rest.split("_")[-1]
                     json_path = rest.split("::")[0] if "::" in rest else rest
 
-                    try:
-                        obj = get_payload(json_path, dns_cb=self.dns_callback, host=self.host)
-                    except TypeError:
-                        obj = get_payload(json_path)
+                    obj = get_payload(json_path, dns_cb=self.dns_callback)
                     payload_orig = None
                     if isinstance(obj, list):
                         payload_orig = next((e for e in obj if isinstance(e, dict)), None)
@@ -464,10 +401,81 @@ class WAFBypass:
                 self._min_interval = original
 
         self._stop = True
-        logger.info(f"Final wb_result: {self.wb_result}")
+
         if self.csv_out:
             self.report()
+
         try:
             self.report_html(os.path.join(os.getcwd(), "waf_report.html"))
         except Exception as e:
             logger.error("Không tạo được HTML report: %s", e)
+
+    def report(self):
+        if not (self.csv_out and self.wb_result):
+            return
+        try:
+            with open(self.csv_out, "w", newline="", encoding="utf-8") as f:
+                w = csv.writer(f)
+                w.writerow(["key", "status", "code", "path", "zone", "json_path", "category", "payload"])
+                for key, val in self.wb_result.items():
+                    path, rest = key.split(":", 1) if ":" in key else ("/", key)
+                    zone = rest.split("::")[-1] if "::" in rest else rest.split("_")[-1]
+                    json_path = rest.split("::")[0] if "::" in rest else rest
+                    parts = os.path.normpath(json_path).split(os.sep)
+                    category = parts[-2] if len(parts) >= 2 else ""
+                    w.writerow([
+                        key,
+                        val.get("status"),
+                        val.get("code"),
+                        path,
+                        zone,
+                        json_path,
+                        category,
+                        str(val.get("payload"))[:500],
+                    ])
+            logger.info("Đã ghi CSV vào %s", self.csv_out)
+        except Exception as e:
+            logger.error("Không ghi được CSV: %s", e)
+
+    def report_html(self, out_path):
+        try:
+            rows = []
+            for key, val in (self.wb_result or {}).items():
+                rows.append({
+                    "key": key,
+                    "status": val.get("status"),
+                    "code": val.get("code"),
+                    "payload": str(val.get("payload"))[:800],
+                })
+            parts = []
+            parts.append("<!doctype html><meta charset='utf-8'><title>WAF Report</title>")
+            parts.append(
+                "<style>body{font-family:system-ui;margin:24px}"
+                "table{border-collapse:collapse;width=100%}"
+                "th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}"
+                ".status{font-weight:600}"
+                ".BLOCKED{color:#16a34a}.BYPASSED{color:#ef4444}.PASSED{color:#2563eb}"
+                ".FALSED{color:#b45309}.CHALLENGE{color:#92400e}</style>"
+            )
+            parts.append("<h1>WAF Test Report</h1>")
+            s = self.stats
+            parts.append(
+                f"<p>BLOCKED: {s.get('BLOCKED',0)} | BYPASSED: {s.get('BYPASSED',0)} | "
+                f"PASSED: {s.get('PASSED',0)} | FALSED: {s.get('FALSED',0)} | "
+                f"CHALLENGE: {s.get('CHALLENGE',0)} | PROCESSED: {self.processed}</p>"
+            )
+            parts.append("<table><thead><tr><th>Key</th><th>Code</th><th>Status</th><th>Payload</th></tr></thead><tbody>")
+            for r in rows:
+                payload_safe = (r["payload"] or "").replace("<", "&lt;").replace(">", "&gt;")
+                parts.append(
+                    f"<tr><td>{r['key']}</td><td>{r['code']}</td>"
+                    f"<td class='status {r['status']}'>{r['status']}</td>"
+                    f"<td><code>{payload_safe}</code></td></tr>"
+                )
+            parts.append("</tbody></table>")
+            html = "".join(parts)
+            with open(out_path, "w", encoding="utf-8") as f:
+                f.write(html)
+            logger.info("Đã tạo HTML report: %s", out_path)
+        except Exception as e:
+            logger.error("Lỗi tạo HTML report: %s", e)
