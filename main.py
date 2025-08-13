@@ -11,8 +11,12 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from utils.bypass import WAFBypass
-from utils import bypass as bypass_mod
+try:
+    from utils.bypass import WAFBypass
+    from utils import bypass as bypass_mod
+except ImportError:
+    from bypass import WAFBypass
+    from bypass import bypass as bypass_mod
 
 LOG_FMT = "%(asctime)s | %(levelname)s | %(message)s"
 logging.basicConfig(level=logging.DEBUG, format=LOG_FMT)
@@ -48,17 +52,22 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument("--rps", type=int, default=6)
     p.add_argument("--retries", type=int, default=3)
     p.add_argument("--retry-backoff", dest="retry_backoff", type=float, default=0.5)
+
     p.add_argument("--dns-callback", dest="dns_callback", default=None)
+
     p.add_argument("--discover", action="store_true")
     p.add_argument("--discover-max", dest="discover_max", type=int, default=80)
     p.add_argument("--path-file", dest="path_file", default=None)
     p.add_argument("--paths", nargs="*", default=None)
+
     p.add_argument("--csv-out", dest="csv_out", default=None)
     p.add_argument("--details", action="store_true")
+
     p.add_argument("--sticky-session", action="store_true")
     p.add_argument("--verify-challenge", action="store_true")
     p.add_argument("--insecure", action="store_true")
-    p.add_argument("--heuristics_mode", choices=["off", "cautious", "strict"], default="cautious")  # Thêm dòng này
+
+    p.add_argument("--heuristics_mode", choices=["off", "cautious", "strict"], default="cautious")
 
     return p
 
@@ -104,7 +113,7 @@ def main() -> int:
         sticky_session=args.sticky_session,
         verify_challenge=args.verify_challenge,
         insecure=args.insecure,
-        heuristics_mode=args.heuristics_mode,  # Thêm dòng này
+        heuristics_mode=args.heuristics_mode,
     )
 
     if all_kwargs.get("dns_callback") is not None:
@@ -125,13 +134,13 @@ def main() -> int:
     print()
 
     init_kwargs = _filter_kwargs_for_callable(all_kwargs, WAFBypass.__init__)
-    log.debug("Khởi tạo WAFBypass với tham số: %s", sorted(init_kwargs.keys()))
+    log.info("Khởi tạo WAFBypass với tham số: %s", sorted(init_kwargs.keys()))
     scanner = WAFBypass(**init_kwargs)
 
     name, fn = _pick_entrypoint_from_obj(scanner)
     if fn is not None:
         run_kwargs = _filter_kwargs_for_callable(all_kwargs, fn)
-        log.debug("Entrypoint: WAFBypass.%s(%s)", name, ", ".join(sorted(run_kwargs.keys())))
+        log.info("Entrypoint: WAFBypass.%s(%s)", name, ", ".join(sorted(run_kwargs.keys())))
         try:
             summary = fn(**run_kwargs)
         except Exception as ex:
@@ -143,7 +152,7 @@ def main() -> int:
             log.error("Không tìm thấy entrypoint nào trong WAFBypass hoặc utils/bypass.py")
             return 3
         run_kwargs = _filter_kwargs_for_callable(all_kwargs, mod_fn)
-        log.debug("Entrypoint: utils.bypass.%s(%s)", mod_name, ", ".join(sorted(run_kwargs.keys())))
+        log.info("Entrypoint: utils.bypass.%s(%s)", mod_name, ", ".join(sorted(run_kwargs.keys())))
         try:
             summary = mod_fn(**run_kwargs)
         except Exception as ex:
@@ -151,10 +160,10 @@ def main() -> int:
             return 2
 
     if isinstance(summary, dict):
-        b = summary.get("BLOCKED", 0)
+        b  = summary.get("BLOCKED", 0)
         bp = summary.get("BYPASSED", 0)
-        p = summary.get("PASSED", 0)
-        f = summary.get("FALSED", 0)
+        p  = summary.get("PASSED", 0)
+        f  = summary.get("FALSED", 0)
         ch = summary.get("CHALLENGE", 0)
         log.info("Tổng kết: BLOCKED=%s | BYPASSED=%s | PASSED=%s | FALSED=%s | CHALLENGE=%s", b, bp, p, f, ch)
 
