@@ -58,6 +58,7 @@ def get_payload(path: Union[str, Path], rnd: str = "", **kwargs) -> Dict[str, An
     dns_cb = kwargs.get("dns_cb")
     host = kwargs.get("host")
     base_url = kwargs.get("base_url")
+
     p = Path(path)
     try:
         with p.open("r", encoding="utf-8") as f:
@@ -67,10 +68,16 @@ def get_payload(path: Union[str, Path], rnd: str = "", **kwargs) -> Dict[str, An
         logger.error(f"Failed to load JSON from {path}: {e}")
         return {}
 
+    # Handle if data is {'payload': [list of dicts]}
+    if 'payload' in data and isinstance(data['payload'], list) and data['payload']:
+        data = data['payload'][0]  # Take the first payload dict
+
     if isinstance(data, list):
         data = data[0] if data else {}
+
     if not isinstance(data, dict):
         data = {"RAW": data}
+
     data = _deep_replace(data, rnd=rnd, dns_cb=dns_cb, host=host, base_url=base_url)
     logger.debug(f"Processed payload from {path}: {data}")
     return data
