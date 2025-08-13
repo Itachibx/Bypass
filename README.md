@@ -1,5 +1,6 @@
 Công Cụ Bypass WAF
 Đây là công cụ dựa trên Python để kiểm tra và bypass Web Application Firewall (WAF) sử dụng các payload định sẵn. Nó quét host target với nhiều method (GET, POST, v.v.) và zone (URL, ARGS, BODY, HEADER, COOKIE, USER-AGENT, REFERER) để xác định payload bị block, bypassed, hay passed. Hãy dùng nó làm điều hợp pháp và sẽ không chịu trách nhiệm cho bất kì hành động nào sử dụng tool làm điều phạm pháp
+
 #Tính Năng
 
 Hỗ trợ nhiều method HTTP (GET, POST, PUT, PATCH, DELETE).
@@ -17,6 +18,8 @@ Cài dependencies:
 pip install -r requirements.txt
 (Giả sử requirements.txt bao gồm requests, urllib3, prettytable, ast nếu cần).
 Đảm bảo thư mục payload/ tồn tại với JSON payload (e.g., XSS, SQLi, v.v.).
+
+
 #Sử Dụng
 Chạy tool với lệnh sau:
 textpython main.py --host "https://target.com/" [options]
