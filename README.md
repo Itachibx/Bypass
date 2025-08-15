@@ -58,8 +58,8 @@ Bạn có thể thêm hoặc sửa đổi payload theo nhu cầu và mục đíc
 
 Báo Cáo
 
-Báo Cáo CSV: Các cột bao gồm: Payload, Phương Thức, Vùng, Mã Trạng Thái, Thời Gian Phản Hồi, Thành Công/Thất Bại.
-Báo Cáo HTML: Bảng tương tác với lọc. Được tạo trong thư mục reports/.
+Báo Cáo CSV: Các cột bao gồm: Payload, Phương Thức,Path, Mã Trạng Thái, Thời Gian Phản Hồi, Thành Công/Thất Bại.
+Báo Cáo HTML. Được tạo trong thư mục reports/.
 
 Tất cả mọi sự đóng góp được chào đón và tiếp thu hãy mở issue trên GitHub hoặc liên hệ mình tại [itachibx2@gmail.com].
 ""
