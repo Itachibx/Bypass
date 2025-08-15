@@ -1,6 +1,8 @@
 """"" 
 Tổng Quan:
 Bypass là một công cụ dựa trên Python được thiết kế dành cho các bạn kiểm tra thâm nhập và nghiên cứu bảo mật để kiểm tra WAF. Nó sử dụng các payload được định nghĩa sẵn để quét qua các phương thức HTTP khác nhau (GET, POST, v.v.) và các vùng khác nhau (URL, ARGS, BODY, HEADER, v.v.). Công cụ hỗ trợ đa luồng, giới hạn tốc độ yêu cầu, heuristics để phát hiện các bước ngăn chặn như CAPTCHA, và tạo báo cáo dưới dạng CSV/HTML.
+
+
 Mình viết tool này không nhằm mục đích thương mại hóa, hay là thể hiện bản thân mình, chỉ muốn tạo sản phẩm để học hỏi và nâng cao trình độ 
 Tuyên Bố Từ Chối Trách Nhiệm: Công cụ này chỉ dành cho mục đích giáo dục và kiểm tra thâm nhập hợp pháp. Không sử dụng trên hệ thống mà không có sự cho phép rõ ràng. Tôi không chịu trách nhiệm cho bất kỳ những hành vi phạm pháp nào
 
