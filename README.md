@@ -61,5 +61,5 @@ Báo Cáo
 Báo Cáo CSV: Các cột bao gồm: Payload, Phương Thức, Vùng, Mã Trạng Thái, Thời Gian Phản Hồi, Thành Công/Thất Bại.
 Báo Cáo HTML: Bảng tương tác với lọc. Được tạo trong thư mục reports/.
 
-Tất cả mọi sự đóng góp được chào  và tiếp thu hãy mở issue trên GitHub hoặc liên hệ tôi tại [itachibx2@gmail.com].
+Tất cả mọi sự đóng góp được chào đón và tiếp thu hãy mở issue trên GitHub hoặc liên hệ mình tại [itachibx2@gmail.com].
 ""
