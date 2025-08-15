@@ -4,7 +4,7 @@ Bypass là một công cụ dựa trên Python được thiết kế dành cho c
 Mình viết tool này không nhằm mục đích thương mại hóa, hay là thể hiện bản thân mình, chỉ muốn tạo sản phẩm để học hỏi và nâng cao trình độ 
 Tuyên Bố Từ Chối Trách Nhiệm: Công cụ này chỉ dành cho mục đích giáo dục và kiểm tra thâm nhập hợp pháp. Không sử dụng trên hệ thống mà không có sự cho phép rõ ràng. Tôi không chịu trách nhiệm cho bất kỳ những hành vi phạm pháp nào
 
-#Các tính năng chính:
+Các tính năng chính:
 Quét Payload: Kiểm tra với các payload tùy chỉnh hoặc tích hợp sẵn cho các lỗ hổng phổ biến.bạn có thể làm giàu về tài nguyên này
 Hỗ Trợ Phương Thức HTTP: Bao gồm GET, POST, PUT, DELETE, và nhiều hơn thế
 Nhắm Đến Vùng: Chèn payload vào URL, body, header, v.v.
@@ -12,12 +12,12 @@ Tùy Chọn Nâng Cao: DNS callback cho phát hiện out-of-band, kiểm tra ref
 Báo Cáo: Báo cáo chi tiết với các chỉ số 
 Tính Năng Nâng Cao: Giới hạn tốc độ để tránh bị phát hiện ghi log
 
-#Cài Đặt:
+Cài Đặt:
 Python 3.8 hoặc cao hơn
 Các thư viện cần thiết:
 pip install -r requirements.txt
  
-#Các Tùy Chọn Payload:
+Các Tùy Chọn Payload:
 
 --url <target_url>: URL mục tiêu để kiểm tra (bắt buộc).
 --method <http_method>: Phương thức HTTP để sử dụng (ví dụ: GET, POST). Mặc định: GET.
@@ -29,7 +29,7 @@ pip install -r requirements.txt
 --dns-callback <dns_server>: Bật DNS callback cho phát hiện OOB.
 --check-reflection: Xác nhận nếu payload được phản ánh trong phản hồi.
 --report <format>: Tạo báo cáo (CSV hoặc HTML)
-#Ví Dụ
+Ví Dụ
 Quét cơ bản trên URL GET:
 bashpython main.py --url https://example.com/vuln --method GET --zone ARGS
 
@@ -53,7 +53,7 @@ json{
 }
 Bạn có thể thêm hoặc sửa đổi payload theo nhu cầu và mục đích của bạn, tôi chỉ sử dụng các payload nhằm đảm bảo không ảnh hưởng đến hệ thống và khá basic, không nhằm mục đích phá hoại
 
-#Báo Cáo
+Báo Cáo
 
 Báo Cáo CSV: Các cột bao gồm: Payload, Phương Thức, Vùng, Mã Trạng Thái, Thời Gian Phản Hồi, Thành Công/Thất Bại.
 Báo Cáo HTML: Bảng tương tác với lọc. Được tạo trong thư mục reports/.
