@@ -16,11 +16,10 @@ Tính Năng Nâng Cao: Giới hạn tốc độ để tránh bị phát hiện g
 
 Cài Đặt:
 
-Python 3.8 hoặc cao hơn
-Các thư viện cần thiết:
+Python 3.8 hoặc cao hơn, Các thư viện cần thiết đều có trong requirements :
+
 pip install -r requirements.txt
 
- 
 Các Tùy Chọn Payload:
 
 --url <target_url>: URL mục tiêu để kiểm tra (bắt buộc).
