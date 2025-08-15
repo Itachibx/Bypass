@@ -15,9 +15,11 @@ Báo Cáo: Báo cáo chi tiết với các chỉ số
 Tính Năng Nâng Cao: Giới hạn tốc độ để tránh bị phát hiện ghi log
 
 Cài Đặt:
+
 Python 3.8 hoặc cao hơn
 Các thư viện cần thiết:
 pip install -r requirements.txt
+
  
 Các Tùy Chọn Payload:
 
