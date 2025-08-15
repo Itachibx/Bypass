@@ -1,78 +1,62 @@
-Công Cụ Bypass WAF
-Đây là công cụ dựa trên Python để kiểm tra và bypass Web Application Firewall (WAF) sử dụng các payload định sẵn. Nó quét host target với nhiều method (GET, POST, v.v.) và zone (URL, ARGS, BODY, HEADER, COOKIE, USER-AGENT, REFERER) để xác định payload bị block, bypassed, hay passed. Hãy dùng nó làm điều hợp pháp và sẽ không chịu trách nhiệm cho bất kì hành động nào sử dụng tool làm điều phạm pháp
+""""" 
+Tổng Quan:
+Bypass là một công cụ dựa trên Python được thiết kế dành cho các bạn kiểm tra thâm nhập và nghiên cứu bảo mật để kiểm tra WAF. Nó sử dụng các payload được định nghĩa sẵn để quét qua các phương thức HTTP khác nhau (GET, POST, v.v.) và các vùng khác nhau (URL, ARGS, BODY, HEADER, v.v.). Công cụ hỗ trợ đa luồng, giới hạn tốc độ yêu cầu, heuristics để phát hiện các bước ngăn chặn như CAPTCHA, và tạo báo cáo dưới dạng CSV/HTML.
+Mình viết tool này không nhằm mục đích thương mại hóa, hay là thể hiện bản thân mình, chỉ muốn tạo sản phẩm để học hỏi và nâng cao trình độ 
+Tuyên Bố Từ Chối Trách Nhiệm: Công cụ này chỉ dành cho mục đích giáo dục và kiểm tra thâm nhập hợp pháp. Không sử dụng trên hệ thống mà không có sự cho phép rõ ràng. Tôi không chịu trách nhiệm cho bất kỳ những hành vi phạm pháp nào
 
-#Tính Năng
+#Các tính năng chính:
+Quét Payload: Kiểm tra với các payload tùy chỉnh hoặc tích hợp sẵn cho các lỗ hổng phổ biến.bạn có thể làm giàu về tài nguyên này
+Hỗ Trợ Phương Thức HTTP: Bao gồm GET, POST, PUT, DELETE, và nhiều hơn thế
+Nhắm Đến Vùng: Chèn payload vào URL, body, header, v.v.
+Tùy Chọn Nâng Cao: DNS callback cho phát hiện out-of-band, kiểm tra reflection để xác nhận bỏ qua thực sự
+Báo Cáo: Báo cáo chi tiết với các chỉ số 
+Tính Năng Nâng Cao: Giới hạn tốc độ để tránh bị phát hiện ghi log
 
-Hỗ trợ nhiều method HTTP (GET, POST, PUT, PATCH, DELETE).
-Quét đa luồng để tăng hiệu quả.
-Giới hạn rate (RPS) và retry để test đáng tin cậy.
-DNS callback cho detection out-of-band.
-Heuristics để detect challenge (e.g., CAPTCHA).
-Tạo report CSV và HTML.
-Check reflection cho true bypassed (kiểm tra payload có reflect trong body response).
-Log chi tiết cho bypassed, blocked, và reflected payload.
-
-#Cài Đặt
-git clone https://github.com/Itachibx/Bypass/
-Cài dependencies:
+#Cài Đặt:
+Python 3.8 hoặc cao hơn
+Các thư viện cần thiết:
 pip install -r requirements.txt
-(Giả sử requirements.txt bao gồm requests, urllib3, prettytable, ast nếu cần).
-Đảm bảo thư mục payload/ tồn tại với JSON payload (e.g., XSS, SQLi, v.v.).
+ 
+#Các Tùy Chọn Payload:
 
+--url <target_url>: URL mục tiêu để kiểm tra (bắt buộc).
+--method <http_method>: Phương thức HTTP để sử dụng (ví dụ: GET, POST). Mặc định: GET.
+--zone <zone>: Vùng để chèn payload (ví dụ: URL, ARGS, BODY, HEADER). Có thể chỉ định nhiều bằng dấu phẩy.
+--payloads <file>: Đường dẫn đến file JSON payload. Mặc định: utils/payload/payloads.json.
+--threads <num>: Số luồng cho quét song song. Mặc định: 10.
+--rate-limit <requests_per_sec>: Giới hạn yêu cầu mỗi giây để tránh bị phát hiện/ ghi log. Mặc định: 5.
+--heuristics: Bật phát hiện thử thách (ví dụ: CAPTCHA, trang 403).
+--dns-callback <dns_server>: Bật DNS callback cho phát hiện OOB.
+--check-reflection: Xác nhận nếu payload được phản ánh trong phản hồi.
+--report <format>: Tạo báo cáo (CSV hoặc HTML)
+#Ví Dụ
+Quét cơ bản trên URL GET:
+bashpython main.py --url https://example.com/vuln --method GET --zone ARGS
 
-#Sử Dụng
-Chạy tool với lệnh sau:
-textpython main.py --host "https://target.com/" [options]
-Options nếu cần
---host: URL target (bắt buộc).
---methods: Method HTTP (e.g., "GET,POST") (default: "GET,POST").
---threads: Số luồng (default: 8).
---rps: Request per second (default: 6).
---retries: Số retry (default: 3).
---retry-backoff: Factor backoff retry (default: 0.5).
---dns-callback: URL DNS callback cho OOB (optional).
---discover: Bật discovery path (optional).
---discover-max: Max path discovery (default: 80).
---csv-out: File CSV output (e.g., results.csv).
---details: Bật log chi tiết.
---heuristics_mode: Mode heuristics (off, cautious, strict) (default: cautious).
---verify-challenge: Verify challenge.
---insecure: Tắt verify TLS.
+Đa luồng POST với payload tùy chỉnh và giới hạn tốc độ:
+bashpython main.py --url https://example.com/api --method POST --zone BODY --payloads custom_payloads.json --threads 20 --rate-limit 10 --report html
 
-Payload là file JSON trong utils/payload/.cấu trúc:
+Nâng cao với heuristics và DNS callback:
+bashpython main.py --url https://target.com --heuristics --dns-callback <yourdns.server> --check-reflection
+
+Định Dạng Payload
+Payload được lưu trữ dưới dạng JSON trong utils/payload/. Cấu trúc ví dụ:
 json{
-  "payload": [
-    {
-      "METHOD": "GET,POST",
-      "URL": "/test?param=<script>alert(1)</script>",
-      "ARGS": {"param": "<script>alert(1)</script>"},
-      "BODY": {"data": "<script>alert(1)</script>"},
-      "HEADER": {"X-Test": "<script>alert(1)</script>"},
-      "COOKIE": {"session": "<script>alert(1)</script>"},
-      "USER-AGENT": "Mozilla/5.0 <script>alert(1)</script>",
-      "REFERER": "http://evil.com <script>alert(1)</script>",
-      "ENCODE": "Base64 UTF-16",
-      "BLOCKED": true
-    }
+  "xss": [
+    "<script>alert(1)</script>",
+    "'\"><script>alert(1)</script>"
+  ],
+  "sqli": [
+    "1' OR '1'='1",
+    "1 UNION SELECT 1,2,3"
   ]
 }
-#Report
+Bạn có thể thêm hoặc sửa đổi payload theo nhu cầu và mục đích của bạn, tôi chỉ sử dụng các payload nhằm đảm bảo không ảnh hưởng đến hệ thống và khá basic, không nhằm mục đích phá hoại
 
-CSV: results.csv với cột: key, status, code, path, zone, json_path, category, payload.
-HTML: waf_report.html – bảng visual với stats và entry.
+#Báo Cáo
 
-Status:
-BLOCKED: WAF chặn.
-BYPASSED_REFLECTED: Bypass và payload reflect (tác động thật).
-PASSED_NO_REFLECT: Passed nhưng không reflect (không tác động).
-FALSED: Response invalid.
-PASSED: Baseline hoặc no payload.
-CHALLENGE: Detect CAPTCHA/challenge.
+Báo Cáo CSV: Các cột bao gồm: Payload, Phương Thức, Vùng, Mã Trạng Thái, Thời Gian Phản Hồi, Thành Công/Thất Bại.
+Báo Cáo HTML: Bảng tương tác với lọc. Được tạo trong thư mục reports/.
 
-#Logging
-Log hiển thị progress và info chi tiết bypass/block (e.g., "TRUE BYPASSED (REFLECTED): key with payload").
-Check "BYPASSED_REFLECTED" để tìm vuln thực.
-#Lưu Ý
-Tool giả định payload trong utils/payload/. Adjust payload_dir trong bypass.py nếu cần.
-Reflection check: Payload phải xuất hiện trong body response.
-Nếu no BYPASSED_REFLECTED, site có thể không vuln hoặc WAF mạnh.
+Tất cả mọi sự đóng góp được chào  và tiếp thu hãy mở issue trên GitHub hoặc liên hệ tôi tại [itachibx2@gmail.com].
+""
